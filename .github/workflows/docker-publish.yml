@@ -8,6 +8,10 @@ on:
 #   push:                   
 #     branches: [ "main" ]  # 當有程式碼 push 到 main 分支時
 
+env:
+  # 這裡會自動抓 Secret 帳號 + 專案名稱
+  IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/demo-golang
+
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
