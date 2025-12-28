@@ -1,4 +1,4 @@
-name: Build and Push to Docker Hub
+name: (Manual Trigger)Build and Push to Docker Hub
 
 # 觸發方式？
 on:
@@ -41,10 +41,11 @@ jobs:
     - name: Build and push
       uses: docker/build-push-action@v5
       with:
-        context: .
+        context: . # 找 Dockerfile 檔案
         push: true
         # 下面這行格式是: 你的帳號/你的專案名:標籤
         # 注意：變數名稱要跟 secret 一樣
+        # latest 用來看， sha用來給CD辨別差異用的
         tags: |
-          ${{ env.IMAGE_NAME }}:latest
+          ${{ env.IMAGE_NAME }}:latest 
           ${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.sha_short }}
