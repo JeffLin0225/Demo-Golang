@@ -1,9 +1,12 @@
 name: Build and Push to Docker Hub
 
-# 觸發？當有程式碼 push 到 main 分支時
+# 觸發方式？
 on:
-  push:
-    branches: [ "main" ]
+  workflow_dispatch:        #「手動執行」的按鈕
+    
+# on:
+#   push:                   
+#     branches: [ "main" ]  # 當有程式碼 push 到 main 分支時
 
 jobs:
   build-and-push:
@@ -33,4 +36,6 @@ jobs:
         push: true
         # 下面這行格式是: 你的帳號/你的專案名:標籤
         # 注意：變數名稱要跟 secret 一樣
-        tags: ${{ secrets.DOCKERHUB_USERNAME }}/demo-golang:latest # 專案名稱
+        tags: |
+          ${{ env.IMAGE_NAME }}:latest
+          ${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.sha_short }}
