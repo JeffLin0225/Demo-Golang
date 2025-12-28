@@ -11,12 +11,18 @@ on:
 env:
   # 這裡會自動抓 Secret 帳號 + 專案名稱
   IMAGE_NAME: ${{ secrets.DOCKERHUB_USERNAME }}/demo-golang
+  
+  # ArgoCD 的 Repo 名稱
+  CD_REPO_NAME: JeffLin0225/Kubernetes-ArgoCD
 
 jobs:
   build-and-push:
     runs-on: ubuntu-latest
     
     steps:
+    # ======================================================
+    # 第一階段：CI (打包程式碼 -> Docker Hub)
+    # ======================================================
     # 1. 下載程式碼到虛擬機
     - name: Checkout code
       uses: actions/checkout@v4
@@ -49,3 +55,36 @@ jobs:
         tags: |
           ${{ env.IMAGE_NAME }}:latest 
           ${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.sha_short }}
+
+    # ======================================================
+    # 第二階段：CD (使用 SSH Key 修改 Repo B)
+    # ======================================================
+    - name: Checkout ArgoCD Repo
+      uses: actions/checkout@v4
+      with:
+        repository: ${{ env.CD_REPO_NAME }}
+        #  這裡就是我們剛剛辛苦設定的 SSH 私鑰
+        ssh-key: ${{ secrets.ARGOCD_GITOPS_KEY }}
+        path: argocd-repo
+    
+    - name: Update Image Tag in Deployment
+      run: |
+          cd argocd-repo
+          
+          # 1. 設定機器人身分 (Git 需要知道是誰改的)
+          git config user.name "GitHub Actions"
+          git config user.email "actions@github.com"
+          
+          # 2. 修改 deployment.yml
+          # 使用 sed 指令，把舊的 image tag 換成剛剛打包好的 sha_short
+          sed -i "s|image: .*|image: ${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.sha_short }}|g" deployment.yml
+          
+          # 3. 檢查修改結果 (印在 Log 讓你確認)
+          echo "Modified deployment.yml content:"
+          cat deployment.yml | grep image:
+          
+          # 4. 提交並推送 (Push)
+          # 因為上面是用 SSH Key checkout，這裡會自動用 SSH 協定推送
+          git add deployment.yml
+          git commit -m "Auto-update image tag to ${{ steps.vars.outputs.sha_short }}"
+          git push origin main
