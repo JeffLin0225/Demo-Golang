@@ -32,6 +32,11 @@ jobs:
         username: ${{ secrets.DOCKERHUB_USERNAME }}
         password: ${{ secrets.DOCKERHUB_TOKEN }}
 
+    # 這一步是用來產生 "a1b2c3d" 這種短版版號的
+    - name: Get Short SHA
+      id: vars   # 這個 id 很重要，下面的 steps.vars 就是在叫它
+      run: echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
     # 4. 打包 Image 並推送到 Docker Hub
     - name: Build and push
       uses: docker/build-push-action@v5
