@@ -11,12 +11,12 @@
 ```mermaid
 flowchart TD
     %% 樣式定義
-    classDef clientStyle fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D47A1;
-    classDef ciStyle fill:#EDE7F6,stroke:#512DA8,stroke-width:2px,color:#311B92;
-    classDef repoStyle fill:#FFF3E0,stroke:#E65100,stroke-width:2px,color:#BF360C;
-    classDef argoStyle fill:#E0F2F1,stroke:#00695C,stroke-width:2px,color:#004D40;
-    classDef k8sStyle fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#1B5E20;
-    classDef probeStyle fill:#FFFDE7,stroke:#F57F17,stroke-width:2px,stroke-dasharray: 5 5,color:#F57F17;
+    classDef clientStyle fill:#E3F2FD,stroke:#1565C0,stroke-width:2px,color:#0D47A1
+    classDef ciStyle fill:#EDE7F6,stroke:#512DA8,stroke-width:2px,color:#311B92
+    classDef repoStyle fill:#FFF3E0,stroke:#E65100,stroke-width:2px,color:#BF360C
+    classDef argoStyle fill:#E0F2F1,stroke:#00695C,stroke-width:2px,color:#004D40
+    classDef k8sStyle fill:#E8F5E9,stroke:#2E7D32,stroke-width:2px,color:#1B5E20
+    classDef probeStyle fill:#FFFDE7,stroke:#F57F17,stroke-width:2px,color:#F57F17
 
     subgraph TriggerLayer ["觸發與原始碼層 (Trigger & Source Layer)"]
         Dev["👤 開發者 (Developer)<br/>Git Commit & Push / Manual Dispatch"]
@@ -30,7 +30,7 @@ flowchart TD
     end
 
     subgraph RegistryLayer ["製品庫與宣告庫 (Registry & GitOps Manifest)"]
-        DockerHub["🐳 Docker Hub Image Registry<br/>${DOCKERHUB_USERNAME}/demo-golang:latest<br/>${DOCKERHUB_USERNAME}/demo-golang:${SHORT_SHA}"]
+        DockerHub["🐳 Docker Hub Image Registry<br/>demo-golang:latest<br/>demo-golang:SHORT_SHA"]
         GitOpsRepo["📄 GitOps 部署配置庫 (CD Repo)<br/>JeffLin0225/Kubernetes-ArgoCD<br/>deployment.yml"]
     end
 
@@ -40,34 +40,35 @@ flowchart TD
 
     subgraph K8sCluster ["運作環境層 (Kubernetes Cluster: Production)"]
         Deploy["🚀 Deployment (Demo App Pods)<br/>Port: 8080 | ENV: APP_VERSION, BG_COLOR"]
-        Kubelet["🛡️ K8s Kubelet Probes<br/>Liveness / Readiness Probe<br/>GET /health (HTTP 200 OK)"]
-        User["🌐 終端使用者 / 瀏覽器<br/>HTTP GET / (HTML 渲染)"]
+        Kubelet["🛡️ K8s Kubelet Probes<br/>Liveness / Readiness Probe<br/>GET /health - HTTP 200 OK"]
+        User["🌐 終端使用者 / 瀏覽器<br/>HTTP GET / - HTML 渲染"]
     end
 
     %% 主 CI/CD 流程
-    Dev -->|1. 觸發 workflow_dispatch / push| SourceRepo
+    Dev -->|1. 觸發 workflow_dispatch 或 push| SourceRepo
     SourceRepo -->|2. 觸發 CI 工作流| GHA
     GHA -->|3. 初始化多架構環境| QEMU
     GHA -->|4. 擷取 Git Commit 短版號| Vars
-    QEMU & Vars -->|5. 建置並推送雙架構映像檔| DockerHub
-    GHA -->|6. SSH Deploy Key 自動修改 deployment.yml 並 Commit Push| GitOpsRepo
+    QEMU -->|5. 建置並推送雙架構映像檔| DockerHub
+    Vars -->|5. 標註短版號並推送| DockerHub
+    GHA -->|6. SSH Deploy Key 自動修改 deployment.yml 並 Push| GitOpsRepo
 
     %% GitOps 同步與部署流程
-    GitOpsRepo -.->|7. 輪詢偵測 / Webhook 差異偵測 (Git Diff)| ArgoCD
-    ArgoCD -->|8. 發起宣告式同步 (Sync Application)| Deploy
-    Deploy -->|9. 拉取指定版本映像檔 (${SHORT_SHA})| DockerHub
+    GitOpsRepo -.->|7. 輪詢偵測或 Git 差異比對| ArgoCD
+    ArgoCD -->|8. 發起宣告式同步 Sync Application| Deploy
+    Deploy -->|9. 拉取指定短版號映像檔| DockerHub
 
     %% 背景治理與終端流量流程
     Kubelet -.->|A. 定期存活與就緒探針檢查| Deploy
-    User -->|B. 訪問 Web 首頁 (Port: 8080)| Deploy
+    User -->|B. 訪問 Web 首頁 Port: 8080| Deploy
 
     %% 套用樣式
-    class Dev,User clientStyle;
-    class GHA,QEMU,Vars ciStyle;
-    class SourceRepo,GitOpsRepo,DockerHub repoStyle;
-    class ArgoCD argoStyle;
-    class Deploy k8sStyle;
-    class Kubelet probeStyle;
+    class Dev,User clientStyle
+    class GHA,QEMU,Vars ciStyle
+    class SourceRepo,GitOpsRepo,DockerHub repoStyle
+    class ArgoCD argoStyle
+    class Deploy k8sStyle
+    class Kubelet probeStyle
 ```
 
 ---
