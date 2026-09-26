@@ -33,19 +33,24 @@ func main() {
 				Image:    batchImage,
 			}
 
+			// 物件轉換為 json []byte
 			payload, err := json.Marshal(req)
 			if err != nil {
 				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
 				return
 			}
 
+			// NewReader:  將 json []byte -> io.Reader 轉為要求的介面
 			resp, err := http.Post(sepEndpoint, "application/json", bytes.NewReader(payload))
 			if err != nil {
 				c.JSON(http.StatusBadGateway, gin.H{"error": "呼叫 SEP 失敗: " + err.Error()})
 				return
 			}
+
+			// 強制 realse io
 			defer resp.Body.Close()
 
+			// io.Reader -> []bytes
 			body, _ := io.ReadAll(resp.Body)
 			var sepResp RunResponse
 			if err := json.Unmarshal(body, &sepResp); err != nil {
