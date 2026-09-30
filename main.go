@@ -22,6 +22,12 @@ func main() {
 		bgColor = "white"
 	}
 
+	// K8s 會把 Pod 名稱設成 hostname,方便在畫面上辨識目前是哪個 Pod 在回應
+	podName, err := os.Hostname()
+	if err != nil {
+		podName = "unknown"
+	}
+
 	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/html")
 		fmt.Fprintf(w, `
@@ -30,7 +36,7 @@ func main() {
                 <p>I am Pod: <span style="color: red; font-weight: bold;">%s</span></p>
                 <p>Sync Time: %s</p>
             </body>
-        `, bgColor, version, time.Now().Format("15:04:05"))
+        `, bgColor, version, podName, time.Now().Format("15:04:05"))
 	})
 
 	// 健康檢查路由 (ArgoCD 判斷 Pod 是否存活用)

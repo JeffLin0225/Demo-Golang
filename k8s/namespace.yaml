@@ -1,0 +1,8 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: ns-demo-go-stg
+  labels:
+    # 跟 SEP 所在的 ns-sep-stg 隔開。Service 與它觸發的 Job 都放這裡，
+    # Job 的資源配額才會算在來源系統自己頭上，而不是佔用 SEP 的 namespace
+    app.kubernetes.io/part-of: demo-go

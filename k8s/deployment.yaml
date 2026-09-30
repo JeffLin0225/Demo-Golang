@@ -1,0 +1,71 @@
+# ============================================================
+# 注意：這份 manifest 只用於「第一次建立」。
+#
+# 之後換版本是由 CD 用 kubectl set env / set image 直接改線上的 Deployment，
+# 不會回頭改這個檔案。所以如果你事後再跑一次 kubectl apply -f 這支，
+# 會把 CD 部署上去的版本「蓋回」下面寫死的值。
+# 要重新 apply 前，先用 kubectl get deploy sep-source -o yaml 確認目前線上版本。
+# ============================================================
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: sep-source
+  namespace: ns-demo-go-stg
+  labels:
+    app: sep-source
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: sep-source
+  template:
+    metadata:
+      labels:
+        app: sep-source
+    spec:
+      containers:
+        - name: sep-source
+          # 初始版本，之後由 CD 的 kubectl set image 覆蓋
+          image: sep-source:git-0075eed
+          # 本機 OrbStack 的 k8s 與 Docker 共用 image store，直接吃本機建好的 image。
+          # 用 Never 而非 IfNotPresent：image 不存在時會明確報錯，
+          # 不會跑去 docker.io 拉一個不存在的 repo 然後 ImagePullBackOff
+          imagePullPolicy: Never
+          ports:
+            - name: http
+              containerPort: 8080
+          env:
+            - name: SEP_ENDPOINT
+              value: "http://sep-engine-svc.ns-sep-stg.svc.cluster.local:8080/api/run"
+            - name: SYSTEM_ID
+              value: "demo-go"
+            # Job 建在來源系統自己的 namespace，而不是 SEP 的
+            - name: JOB_NAMESPACE
+              value: "ns-demo-go-stg"
+            # 這個值就是版本閘門，由 CD 的 kubectl set env 更新
+            # 必須是 immutable tag，絕對不要用 :latest
+            - name: BATCH_IMAGE
+              value: "ghcr.io/jefflin0225/emailbatch:git-0075eed"
+          resources:
+            requests:
+              cpu: "50m"
+              memory: "64Mi"
+            limits:
+              cpu: "200m"
+              memory: "128Mi"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: sep-source-svc
+  namespace: ns-demo-go-stg
+  labels:
+    app: sep-source
+spec:
+  type: ClusterIP
+  selector:
+    app: sep-source
+  ports:
+    - name: http
+      port: 8080
+      targetPort: http

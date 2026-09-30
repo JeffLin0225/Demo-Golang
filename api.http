@@ -1,0 +1,58 @@
+# demo-go 來源系統 API 測試
+# GoLand / IDEA 可直接點左側綠色箭頭執行。
+#
+# 情境一：IDE 直接 Run Service/main.go   → 用 {{ideHost}}（:8080）
+# 情境二：部署到 k8s 之後                → 先開 port-forward，再用 {{k8sHost}}（:18080）
+#         kubectl port-forward svc/sep-source-svc 18080:8080 -n ns-demo-go-stg
+
+@ideHost = http://localhost:8080
+@k8sHost = http://localhost:18080
+
+# SEP 本身的位址。在叢集外要打真的 SEP 一樣要 port-forward：
+#   kubectl port-forward svc/sep-engine-svc 19090:8080 -n ns-sep-stg
+@sepHost = http://localhost:19090
+
+
+### 1. 觸發批次（IDE 本機跑 Service）
+# 不需要 body，image / system_id 都由 Service 自己的環境變數決定，
+# 呼叫端無法指定版本，這是刻意的設計
+POST {{ideHost}}/api/callsep
+
+> {%
+    client.test("回應 200", function () {
+        client.assert(response.status === 200, "狀態碼: " + response.status);
+    });
+    client.test("SEP 有回傳 job_name", function () {
+        client.assert(response.body.job_name !== undefined && response.body.job_name !== "",
+            "job_name 是空的，通常代表 RunResponse 的 json tag 對不上 SEP 的回應格式");
+    });
+    client.log("Job: " + response.body.job_name);
+%}
+
+
+### 2. 觸發批次（k8s 部署版，需先 port-forward）
+POST {{k8sHost}}/api/callsep
+
+
+### 3. 直接打 SEP /api/run，繞過 Service
+# 用途：當第 1 項失敗時，用這個判斷問題出在「你的 Service」還是「SEP 本身」。
+# 這支會成功但第 1 項失敗 → 問題在 Service；兩支都失敗 → 問題在 SEP 或網路
+POST {{sepHost}}/api/run
+Content-Type: application/json
+
+{
+  "system_id": "demo-go",
+  "task_id": "manual-test-001",
+  "image": "ghcr.io/jefflin0225/emailbatch:git-0075eed"
+}
+
+
+### 4. 驗證 SEP 的參數檢查（預期回 400）
+# system_id 未在 quotas 註冊時 SEP 會回 500；
+# 這裡故意送缺少必填欄位的 body，確認 SEP 的 binding 驗證有生效
+POST {{sepHost}}/api/run
+Content-Type: application/json
+
+{
+  "task_id": "missing-required-fields"
+}

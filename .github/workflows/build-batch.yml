@@ -1,0 +1,77 @@
+# ============================================================
+# CI ONLY - 這個 workflow 只負責 build + push batch images
+#
+# 它「不會」更新任何執行中環境的設定，也不會觸發任何 deploy。
+# 跑完之後，正在運行的 Service 仍然指向舊版本 image，行為完全不變。
+# 要讓新版本生效，必須另外手動觸發 deploy 流程並指定 tag。
+# ============================================================
+name: (Manual Trigger) Build Batch Images
+
+on:
+  workflow_dispatch:
+
+env:
+  REGISTRY: ghcr.io
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      packages: write
+
+    strategy:
+      matrix:
+        include:
+          - name: emailbatch
+            dockerfile: Batch/EmailBatch/Dockerfile
+          - name: linebatch
+            dockerfile: Batch/LineBatch/Dockerfile
+          - name: errorbatch
+            dockerfile: Batch/ErrorBatch/Dockerfile
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      # GHCR 使用內建的 GITHUB_TOKEN，不需要額外設定 secret
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # GHCR 的 image 路徑必須全小寫，owner 名稱要轉換
+      - name: Resolve image metadata
+        id: meta
+        run: |
+          echo "owner=${GITHUB_REPOSITORY_OWNER,,}" >> $GITHUB_OUTPUT
+          echo "sha_short=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
+
+      # 只推 immutable tag，刻意不推 :latest
+      # batch image 只會被 Service 的 BATCH_IMAGE 引用，推 :latest 沒有任何好處，
+      # 只會製造「不小心指到會浮動的 tag」的風險
+      - name: Build and push
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ${{ matrix.dockerfile }}
+          push: true
+          platforms: linux/amd64,linux/arm64
+          tags: ${{ env.REGISTRY }}/${{ steps.meta.outputs.owner }}/${{ matrix.name }}:git-${{ steps.meta.outputs.sha_short }}
+
+      # 把這次建出來的完整 image 位址印在 summary，deploy 時直接複製這串
+      - name: Print image reference
+        run: |
+          echo "### ${{ matrix.name }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
+          echo "${{ env.REGISTRY }}/${{ steps.meta.outputs.owner }}/${{ matrix.name }}:git-${{ steps.meta.outputs.sha_short }}" >> $GITHUB_STEP_SUMMARY
+          echo '```' >> $GITHUB_STEP_SUMMARY
