@@ -2,13 +2,16 @@
 # 由 ci.sh / cd.sh / status.sh 共用的設定與工具函式。
 # 這支不會被直接執行，只會被 source。
 
-REGISTRY_PREFIX="${REGISTRY_PREFIX:-ghcr.io/jefflin0225}"
+# 本機 build 的 image 純粹放在本機 docker image store，從沒 push 去任何地方
+# （imagePullPolicy: Never），所以預設值刻意不用 ghcr.io 之類的 registry 字樣，
+# 避免讓人誤以為這些 image 真的有被推上某個 registry。
+# 真的要推去 GHCR 測試時，執行前覆蓋這個變數即可：
+#   REGISTRY_PREFIX=ghcr.io/jefflin0225 ./scripts/ci.sh
+REGISTRY_PREFIX="${REGISTRY_PREFIX:-local}"
 SERVICE_IMAGE_NAME="${SERVICE_IMAGE_NAME:-sep-source}"
 NAMESPACE="${NAMESPACE:-ns-demo-go-stg}"
 DEPLOYMENT="${DEPLOYMENT:-sep-source}"
 CONTAINER_NAME="${CONTAINER_NAME:-sep-source}"
-# Service 的 BATCH_IMAGE 要指向哪一支 batch（emailbatch / linebatch / errorbatch）
-BATCH_KIND="${BATCH_KIND:-emailbatch}"
 
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 
@@ -20,6 +23,12 @@ BATCH_TARGETS=(
 
 git_tag() {
   echo "git-$(git -C "$REPO_ROOT" rev-parse --short HEAD)"
+}
+
+# 把 BATCH_TARGETS 的 name 轉成對應環境變數名稱，例如
+# emailbatch -> BATCH_IMAGE_EMAILBATCH，跟 service/main.go 讀取的 key 對齊。
+batch_env_var() {
+  echo "BATCH_IMAGE_$(echo "$1" | tr '[:lower:]' '[:upper:]')"
 }
 
 require_image() {

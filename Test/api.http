@@ -1,0 +1,138 @@
+# demo-go 來源系統 API 測試
+# GoLand / IDEA 可直接點左側綠色箭頭執行。
+#
+# 情境一：IDE 直接 Run service/main.go   → 用 {{ideHost}}（:8081，見下方「坑3」）
+# 情境二：部署到 k8s 之後                → 先開 port-forward，再用 {{k8sHost}}（:18080）
+#         kubectl port-forward svc/sep-source-svc 18080:8080 -n ns-demo-go-stg
+#         （不想開 port-forward 的話，改用 Test/api.cluster-direct.http，直連叢集 DNS）
+#
+# 坑3：這台機器上 OrbStack 自己常駐佔用 127.0.0.1:8080，跟 Service 預設監聽的
+#      8080 衝突，打 localhost:8080 容易打到 OrbStack 而不是 Service，收到的 404
+#      長得很像路由沒註冊，很容易誤判。本機開發請搭配 .env 的 PORT=8081。
+
+@ideHost = http://localhost:8081
+@k8sHost = http://localhost:18080
+
+# SEP 本身的位址。在叢集外要打真的 SEP 一樣要 port-forward：
+#   kubectl port-forward svc/sep-engine-svc 19090:8080 -n ns-sep-stg
+@sepHost = http://localhost:19090
+
+
+### 1. 觸發批次（IDE 本機跑 Service，不帶 body → 預期回 400）
+# batch_kind 沒有預設值，不帶就是呼叫端的錯，Service 不會幫忙猜要跑哪一支
+POST {{ideHost}}/api/callsep
+
+> {%
+    client.test("回應 400（batch_kind 必填）", function () {
+        client.assert(response.status === 400, "狀態碼: " + response.status);
+    });
+%}
+
+
+### 1b. 觸發批次（IDE 本機跑 Service，指定 batch_kind）
+# 用 batch_kind 選要跑 emailbatch / linebatch / errorbatch 哪一支，必填
+POST {{ideHost}}/api/callsep
+Content-Type: application/json
+
+{
+  "batch_kind": "linebatch"
+}
+
+> {%
+    client.test("回應 200", function () {
+        client.assert(response.status === 200, "狀態碼: " + response.status);
+    });
+    client.log("Job: " + response.body.job_name);
+%}
+
+
+### 1c. 觸發批次（未知的 batch_kind，預期回 400）
+POST {{ideHost}}/api/callsep
+Content-Type: application/json
+
+{
+  "batch_kind": "not-a-real-batch"
+}
+
+> {%
+    client.test("回應 400", function () {
+        client.assert(response.status === 400, "狀態碼: " + response.status);
+    });
+    client.test("有回傳合法清單", function () {
+        client.assert(Array.isArray(response.body.allowed) && response.body.allowed.length === 3,
+            "allowed 欄位不是預期的 3 個合法 batch_kind");
+    });
+%}
+
+
+### 2. 觸發批次（k8s 部署版，需先 port-forward，不帶 batch_kind → 預期 400）
+POST {{k8sHost}}/api/callsep
+
+> {%
+    client.test("回應 400（batch_kind 必填）", function () {
+        client.assert(response.status === 400, "狀態碼: " + response.status);
+    });
+%}
+
+
+### 2a. 觸發批次（k8s 部署版，指定 batch_kind=emailbatch）
+# 已手動驗證過：Service 能正確連到叢集內真正的 sep-engine-svc。
+# 目前預期會是 502（SEP 回 500「建立 Job 失敗」），因為 demo-go 還沒在
+# serverless/charts/values.yaml 的 quotas.systems 註冊配額。
+# 等 SEP 那邊補完配額，這裡應該會變成 200 並帶 job_name。
+POST {{k8sHost}}/api/callsep
+Content-Type: application/json
+
+{
+  "batch_kind": "emailbatch"
+}
+
+> {%
+    client.test("回應狀態碼合理 (200 成功 或 502 SEP 端錯誤)", function () {
+        client.assert(response.status === 200 || response.status === 502, "狀態碼: " + response.status);
+    });
+
+    if (response.status === 200) {
+        client.test("SEP 有回傳 job_name", function () {
+            client.assert(response.body.job_name !== undefined && response.body.job_name !== "",
+                "job_name 是空的，通常代表 RunResponse 的 json tag 對不上 SEP 的回應格式");
+        });
+        client.log("Job: " + response.body.job_name);
+    } else {
+        client.log("SEP 回應錯誤（檢查是否為 quota 尚未註冊）: " + JSON.stringify(response.body));
+    }
+%}
+
+
+### 2b. 觸發批次（k8s 部署版，指定 batch_kind=errorbatch）
+# errorbatch 故意模擬失敗（log.Fatalf），用來測 SEP 那邊 Job 失敗時的行為
+POST {{k8sHost}}/api/callsep
+Content-Type: application/json
+
+{
+  "batch_kind": "errorbatch"
+}
+
+
+### 3. 直接打 SEP /api/run，繞過 Service
+# 用途：當第 1 項失敗時，用這個判斷問題出在「你的 Service」還是「SEP 本身」。
+# 這支會成功但第 1 項失敗 → 問題在 Service；兩支都失敗 → 問題在 SEP 或網路
+POST {{sepHost}}/api/run
+Content-Type: application/json
+
+{
+  "system_id": "demo-go",
+  "task_id": "manual-test-001",
+  "image": "local/emailbatch:git-b00ef34"
+}
+
+
+### 4. 驗證 SEP 的參數檢查（預期回 400）
+# system_id 未在 quotas 註冊時 SEP 會回 500；
+# 這裡故意送缺少必填欄位的 body，確認 SEP 的 binding 驗證有生效
+POST {{sepHost}}/api/run
+Content-Type: application/json
+
+{
+  "task_id": "missing-required-fields"
+}

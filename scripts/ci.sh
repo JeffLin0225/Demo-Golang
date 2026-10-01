@@ -4,7 +4,16 @@ set -euo pipefail
 # ============================================================
 # CI：只建置 image，不部署任何東西
 #
+# 用法（不接受任何參數，tag 一律由 git HEAD 推導）：
 #   ./scripts/ci.sh
+#
+# 每次執行會把下面 4 支 image 全部一起 build，沒有「只建一支」的選項：
+#   - service（你的 API，對應 service/Dockerfile）
+#   - emailbatch / linebatch / errorbatch（三支都建，見 Batch/ 底下對應目錄）
+#
+# 可用環境變數覆蓋預設值（定義在 common.sh）：
+#   REGISTRY_PREFIX=local          batch image 的前綴，預設 local（純本機 tag，沒有 push 去任何 registry）
+#   SERVICE_IMAGE_NAME=sep-source   service image 的名稱（本機 tag，不經 registry）
 #
 # 跑完之後叢集裡執行中的版本完全不變。
 # 要讓新版生效必須另外執行 ./scripts/cd.sh <tag>，這是刻意的。
@@ -40,7 +49,7 @@ for target in "${BATCH_TARGETS[@]}"; do
 done
 
 echo "--- building ${SERVICE_IMAGE_NAME} ---"
-docker build -q -f Service/Dockerfile -t "${SERVICE_IMAGE_NAME}:${TAG}" .
+docker build -q -f service/Dockerfile -t "${SERVICE_IMAGE_NAME}:${TAG}" .
 
 echo ""
 echo "===== CI 完成 ====="

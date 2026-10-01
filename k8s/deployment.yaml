@@ -42,10 +42,16 @@ spec:
             # Job 建在來源系統自己的 namespace，而不是 SEP 的
             - name: JOB_NAMESPACE
               value: "ns-demo-go-stg"
-            # 這個值就是版本閘門，由 CD 的 kubectl set env 更新
-            # 必須是 immutable tag，絕對不要用 :latest
-            - name: BATCH_IMAGE
-              value: "ghcr.io/jefflin0225/emailbatch:git-0075eed"
+            # 三支 batch 的版本閘門，都由 CD 的 kubectl set env 更新。
+            # 必須是 immutable tag，絕對不要用 :latest。
+            # 呼叫端打 /api/callsep 時「必須」用 batch_kind 參數指定要用哪一支，
+            # 沒有預設值、不帶就是 400，Service 自己不組 image 字串，只能從這三個裡面選。
+            - name: BATCH_IMAGE_EMAILBATCH
+              value: "local/emailbatch:git-0075eed"
+            - name: BATCH_IMAGE_LINEBATCH
+              value: "local/linebatch:git-0075eed"
+            - name: BATCH_IMAGE_ERRORBATCH
+              value: "local/errorbatch:git-0075eed"
           resources:
             requests:
               cpu: "50m"

@@ -1,0 +1,91 @@
+# demo-go / SEP 直連測試（不開 kubectl port-forward）
+#
+# OrbStack 的網路有打通 Mac host <-> k8s cluster network，所以不用 port-forward，
+# host 可以直接打：
+#   1. Service 的 ClusterIP（會變動，Service 被刪掉重建就換了）
+#   2. *.svc.cluster.local 這組叢集內部 DNS（穩定，只要 Service 名稱/namespace 沒變就不會變）
+# 兩種都已手動驗證過打得通，這份檔案一律用 DNS name，ClusterIP 列在旁邊當备查。
+#
+# 跟 Test/api.http 的差異：
+#   - Test/api.http 的「k8s 部署版」測試要先手動開一個 port-forward 行程才能用
+#   - 這份檔案完全不用開 port-forward，GoLand 綠色箭頭直接點就能打
+#
+# 查目前 ClusterIP（重建 Service 後請重新查一次）：
+#   kubectl get svc sep-source-svc -n ns-demo-go-stg -o jsonpath='{.spec.clusterIP}'
+#   kubectl get svc sep-engine-svc -n ns-sep-stg -o jsonpath='{.spec.clusterIP}'
+# 目前（僅供參考，可能已經變了）：
+#   sep-source-svc = 192.168.194.194
+#   sep-engine-svc = 192.168.194.177
+
+@demoGoSvc = http://sep-source-svc.ns-demo-go-stg.svc.cluster.local:8080
+@sepSvc = http://sep-engine-svc.ns-sep-stg.svc.cluster.local:8080
+
+
+### 1. 【demo-go 的 Service】直連 ClusterIP，不帶 batch_kind（預期 400）
+# batch_kind 沒有預設值，不帶就是呼叫端的錯
+POST {{demoGoSvc}}/api/callsep
+
+> {%
+    client.test("回應 400（batch_kind 必填）", function () {
+        client.assert(response.status === 400, "狀態碼: " + response.status);
+    });
+%}
+
+
+### 1a. 【demo-go 的 Service】直連 ClusterIP，指定 batch_kind=emailbatch
+# 這支打的是 demo-go 自己在 k8s 裡的 Service，驗證「部署版的 Service 本身」
+# 不需要 port-forward，純粹靠 OrbStack 的叢集 DNS
+POST {{demoGoSvc}}/api/callsep
+Content-Type: application/json
+
+{
+  "batch_kind": "emailbatch"
+}
+
+> {%
+    client.test("回應狀態碼合理 (200 成功 或 502 SEP 端錯誤)", function () {
+        client.assert(response.status === 200 || response.status === 502, "狀態碼: " + response.status);
+    });
+    if (response.status === 200) {
+        client.log("Job: " + response.body.job_name);
+    } else {
+        client.log("SEP 回應錯誤: " + JSON.stringify(response.body));
+    }
+%}
+
+
+### 2. 【demo-go 的 Service】直連 ClusterIP，指定 batch_kind=linebatch
+POST {{demoGoSvc}}/api/callsep
+Content-Type: application/json
+
+{
+  "batch_kind": "linebatch"
+}
+
+
+### 3. 【demo-go 的 Service】直連 ClusterIP，未知 batch_kind（預期 400，驗證不會穿透到 SEP）
+POST {{demoGoSvc}}/api/callsep
+Content-Type: application/json
+
+{
+  "batch_kind": "not-a-real-batch"
+}
+
+> {%
+    client.test("回應 400，且沒打到 SEP", function () {
+        client.assert(response.status === 400, "狀態碼: " + response.status);
+    });
+%}
+
+
+### 4. 【SEP 本身】直連 ClusterIP，繞過 demo-go 的 Service
+# 跟 Test/api.http 的第 3 項同一個用途（判斷問題在 Service 還是 SEP），
+# 差別只在不用開 port-forward
+POST {{sepSvc}}/api/run
+Content-Type: application/json
+
+{
+  "system_id": "demo-go",
+  "task_id": "cluster-direct-test",
+  "image": "local/emailbatch:git-b00ef34"
+}

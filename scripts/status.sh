@@ -37,7 +37,11 @@ fi
 
 echo "  Service image : $(kubectl get deployment "$DEPLOYMENT" -n "$NAMESPACE" \
   -o jsonpath='{.spec.template.spec.containers[0].image}')"
-echo "  BATCH_IMAGE   : $(kubectl get deployment "$DEPLOYMENT" -n "$NAMESPACE" \
-  -o jsonpath='{.spec.template.spec.containers[0].env[?(@.name=="BATCH_IMAGE")].value}')"
+for target in "${BATCH_TARGETS[@]}"; do
+  name="${target%%:*}"
+  env_var="$(batch_env_var "$name")"
+  printf '  %-20s: %s\n' "$env_var" "$(kubectl get deployment "$DEPLOYMENT" -n "$NAMESPACE" \
+    -o jsonpath="{.spec.template.spec.containers[0].env[?(@.name==\"${env_var}\")].value}")"
+done
 echo ""
 kubectl get pods -n "$NAMESPACE" -l "app=${DEPLOYMENT}" | sed 's/^/  /'
