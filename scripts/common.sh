@@ -25,17 +25,28 @@ git_tag() {
   echo "git-$(git -C "$REPO_ROOT" rev-parse --short HEAD)"
 }
 
-# cd.sh 沒收到明確 tag 參數時呼叫：直接問 Docker daemon 自己的 image
-# metadata（建立時間），取回「本機建置過、最新的那一版」的 tag。
-# 這是本機沒有真正 registry 時最接近的替代——真正環境裡 CD 會去 registry
-# 查最新 push 的 tag，這裡 Docker 本機 image store 就是那個「registry」。
+# cd.sh 沒收到明確 tag 參數時呼叫：取回「本機建置過、最新的那一版」的 tag。
+#
+# 「最新」錨定在 git commit 歷史，不是 Docker image metadata：
+# 從 HEAD 開始依序往回找每個 commit 的 short SHA，回傳第一個本機已經建好
+# image 的那個 —— 跟真正 CI/CD 判斷新舊的方式一致（真實環境是 CI 直接把
+# commit SHA 傳給 CD，或透過 GitOps commit 驅動；這裡本機沒有真正的
+# pipeline 串接，退而求其次用 git log 的祖先順序模擬同一件事）。
+#
+# 刻意不用 docker images 的 CreatedAt 排序：Docker build cache 只要某層
+# 內容沒變就會沿用舊 layer（連 timestamp 都沿用），曾經出現多個 tag
+# CreatedAt 完全相同、退而比較 tag 字串字母順序選錯版本的情況。
+#
 # 找不到任何已建置的 image 就印空字串，呼叫端自己判斷要不要擋下來。
 latest_built_tag() {
-  docker images "${SERVICE_IMAGE_NAME}" --format '{{.CreatedAt}}|{{.Tag}}' \
-    | grep -v '<none>' \
-    | sort -r \
-    | head -n1 \
-    | cut -d'|' -f2
+  local sha candidate
+  while read -r sha; do
+    candidate="git-${sha}"
+    if docker image inspect "${SERVICE_IMAGE_NAME}:${candidate}" >/dev/null 2>&1; then
+      echo "$candidate"
+      return 0
+    fi
+  done < <(git -C "$REPO_ROOT" log --format='%h')
 }
 
 # 把 BATCH_TARGETS 的 name 轉成對應環境變數名稱，例如
