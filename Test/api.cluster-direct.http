@@ -77,15 +77,28 @@ Content-Type: application/json
     });
 %}
 
-
-### 4. 【SEP 本身】直連 ClusterIP，繞過 demo-go 的 Service
-# 跟 Test/api.http 的第 3 項同一個用途（判斷問題在 Service 還是 SEP），
-# 差別只在不用開 port-forward
+### 5. 測試 SEP Cleaner 收割異常 Waiting Pod（跟 Test/api.http 的第 5 項同一個用途，差別只在不用開 port-forward）
+# 原理：stg 的 IMAGE_PULL_POLICY=Never（見 services/engine/.env.stg），
+#       故意給一個節點上不存在的 image，Pod 會 100% 確定卡在 Waiting 狀態、
+#       reason = ErrImageNeverPull —— 不在 cleaner 的白名單
+#       NORMAL_WAITING_REASONS=ContainerCreating,PodInitializing 內，必定被判定異常並收割。
+# 這支只負責「觸發」，Job 建立成功就會回 200（image 拉取失敗是非同步發生的）。
 POST {{sepSvc}}/api/run
 Content-Type: application/json
 
 {
   "system_id": "demo-go",
-  "task_id": "cluster-direct-test",
-  "image": "local/emailbatch:git-b00ef34"
+  "task_id": "cleaner-waiting-test-001",
+  "namespace": "ns-demo-go-stg",
+  "image": "local/does-not-exist:cleaner-test"
 }
+
+> {%
+    client.test("回應 200，Job 成功建立（image 拉取失敗會晚一點才發生）", function () {
+        client.assert(response.status === 200, "狀態碼: " + response.status);
+    });
+    client.log("Job: " + response.body.job_name + " —— 接下來手動驗證（.http 檔案本身不能跑 kubectl）：");
+    client.log("1. kubectl get pod -n ns-demo-go-stg -w   # 應該會看到 Waiting reason 變成 ErrImageNeverPull");
+    client.log("2. kubectl logs -n ns-sep-stg -l app=sep-cleaner -f   # 30 秒內應該印出 🚨 ALERT 接著 🧹 CLEAN");
+    client.log("3. kubectl get job,pod -n ns-demo-go-stg   # 確認上面那個 Job/Pod 已經被 cleaner 刪掉");
+%}

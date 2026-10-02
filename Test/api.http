@@ -80,7 +80,7 @@ POST {{k8sHost}}/api/callsep
 # 目前預期會是 502（SEP 回 500「建立 Job 失敗」），因為 demo-go 還沒在
 # serverless/charts/values.yaml 的 quotas.systems 註冊配額。
 # 等 SEP 那邊補完配額，這裡應該會變成 200 並帶 job_name。
-POST {{k8sHost}}/api/callsep
+POST {{ideHost}}/api/callsep
 Content-Type: application/json
 
 {
@@ -106,7 +106,7 @@ Content-Type: application/json
 
 ### 2b. 觸發批次（k8s 部署版，指定 batch_kind=errorbatch）
 # errorbatch 故意模擬失敗（log.Fatalf），用來測 SEP 那邊 Job 失敗時的行為
-POST {{k8sHost}}/api/callsep
+POST {{ideHost}}/api/callsep
 Content-Type: application/json
 
 {
@@ -136,3 +136,32 @@ Content-Type: application/json
 {
   "task_id": "missing-required-fields"
 }
+
+
+### 5. 測試 SEP Cleaner 收割異常 Waiting Pod
+# 用途：驗證 sep-cleaner 微服務（services/cleaner）能抓到卡在異常 Waiting 狀態的 Pod 並自動收割。
+# 原理：stg 的 IMAGE_PULL_POLICY=Never（見 services/engine/.env.stg），
+#       故意給一個節點上不存在的 image，Pod 會 100% 確定卡在 Waiting 狀態、
+#       reason = ErrImageNeverPull —— 這個 reason 不在 cleaner 的白名單
+#       NORMAL_WAITING_REASONS=ContainerCreating,PodInitializing 內，必定會被判定異常。
+# 這支只負責「觸發」，Job 建立成功就會回 200（image pull 失敗是非同步發生的，
+# 不會反映在這支 API 的回應上）。
+POST {{sepHost}}/api/run
+Content-Type: application/json
+
+{
+  "system_id": "demo-go",
+  "task_id": "cleaner-waiting-test-001",
+  "namespace": "ns-demo-go-stg",
+  "image": "local/does-not-exist:cleaner-test"
+}
+
+> {%
+    client.test("回應 200，Job 成功建立（image 拉取失敗會晚一點才發生）", function () {
+        client.assert(response.status === 200, "狀態碼: " + response.status);
+    });
+    client.log("Job: " + response.body.job_name + " —— 接下來手動驗證（.http 檔案本身不能跑 kubectl）：");
+    client.log("1. kubectl get pod -n ns-demo-go-stg -w   # 應該會看到 Waiting reason 變成 ErrImageNeverPull");
+    client.log("2. kubectl logs -n ns-sep-stg -l app=sep-cleaner -f   # 30 秒內應該印出 🚨 ALERT 接著 🧹 CLEAN");
+    client.log("3. kubectl get job,pod -n ns-demo-go-stg   # 確認上面那個 Job/Pod 已經被 cleaner 刪掉");
+%}

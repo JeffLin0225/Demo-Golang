@@ -25,6 +25,19 @@ git_tag() {
   echo "git-$(git -C "$REPO_ROOT" rev-parse --short HEAD)"
 }
 
+# cd.sh 沒收到明確 tag 參數時呼叫：直接問 Docker daemon 自己的 image
+# metadata（建立時間），取回「本機建置過、最新的那一版」的 tag。
+# 這是本機沒有真正 registry 時最接近的替代——真正環境裡 CD 會去 registry
+# 查最新 push 的 tag，這裡 Docker 本機 image store 就是那個「registry」。
+# 找不到任何已建置的 image 就印空字串，呼叫端自己判斷要不要擋下來。
+latest_built_tag() {
+  docker images "${SERVICE_IMAGE_NAME}" --format '{{.CreatedAt}}|{{.Tag}}' \
+    | grep -v '<none>' \
+    | sort -r \
+    | head -n1 \
+    | cut -d'|' -f2
+}
+
 # 把 BATCH_TARGETS 的 name 轉成對應環境變數名稱，例如
 # emailbatch -> BATCH_IMAGE_EMAILBATCH，跟 service/main.go 讀取的 key 對齊。
 batch_env_var() {

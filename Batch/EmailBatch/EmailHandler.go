@@ -12,7 +12,7 @@ func main() {
 	time.Sleep(5 * time.Second)
 
 	log.Printf(" Email 資料發送中...")
-
+	log.Printf(" 確認有用新版")
 	time.Sleep(5 * time.Second)
 
 	log.Printf("Email 發送完畢！")

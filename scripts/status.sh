@@ -24,6 +24,15 @@ docker images \
   --format '{{.Repository}}:{{.Tag}}' | sort | sed 's/^/  /' || true
 echo ""
 
+echo "===== cd.sh 不帶參數時會部署的版本（本機建置時間最新）====="
+last_build="$(latest_built_tag)"
+if [[ -n "$last_build" ]]; then
+  echo "  ${last_build}"
+else
+  echo "  (尚未執行過 ci.sh，本機沒有任何已建置的 image)"
+fi
+echo ""
+
 echo "===== 叢集中運行的版本（CD 結果）====="
 if ! kubectl cluster-info >/dev/null 2>&1; then
   echo "  (連不到叢集，OrbStack 的 k8s 若未啟用請執行： orb start k8s)"

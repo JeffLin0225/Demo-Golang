@@ -59,4 +59,7 @@ done
 echo "  ${SERVICE_IMAGE_NAME}:${TAG}"
 echo ""
 echo "叢集中執行的版本不受影響，仍是舊版。"
-echo "要讓這一版生效： ./scripts/cd.sh ${TAG}"
+echo "這是目前本機建置時間最新的版本，cd.sh 不帶參數執行時會自動部署這一版"
+echo "（即使 build 跟 deploy 分開時間/隔天執行也一樣，不需要手動複製貼上 tag）。"
+echo "要讓這一版生效： ./scripts/cd.sh            （不帶參數＝部署本機最新建置的版本）"
+echo "要改部署別的版本： ./scripts/cd.sh <tag>     （例如要刻意跑舊版本做新舊比較）"

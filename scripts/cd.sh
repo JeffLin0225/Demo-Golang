@@ -4,9 +4,16 @@ set -euo pipefail
 # ============================================================
 # CD：把指定版本部署到 Kubernetes
 #
-# 用法（一定要明確指定 tag，沒有「自動抓最新」的行為）：
-#   ./scripts/cd.sh <tag>
-#   例如： ./scripts/cd.sh git-0075eed
+# 用法：
+#   ./scripts/cd.sh            → 不帶參數，自動部署「本機 Docker image store 裡
+#                                 建立時間最新的版本」（查 docker image 的
+#                                 CreatedAt metadata，模擬正式環境裡 CD 去
+#                                 registry 查最新 tag 的行為；build 跟 deploy
+#                                 可以分開時間/隔天觸發，deploy 端不需要人工
+#                                 把 build 端算出的 SHA 複製貼上一次）
+#   ./scripts/cd.sh <tag>      → 明確指定要部署的版本，覆蓋上面的自動行為，
+#                                 用於刻意部署非最新版本（例如要跑舊版本的
+#                                 batch 去跟新版本結果比較）
 #
 # 可用的 tag 請先執行 ./scripts/status.sh 查看（必須是 ci.sh 已經建過的 tag）。
 #
@@ -30,9 +37,14 @@ cd "$REPO_ROOT"
 
 TAG="${1:-}"
 if [[ -z "$TAG" ]]; then
-  echo "用法: $0 <tag>    例如: $0 git-0075eed" >&2
-  echo "可用的 tag 請執行 ./scripts/status.sh 查看" >&2
-  exit 1
+  TAG="$(latest_built_tag)"
+  if [[ -z "$TAG" ]]; then
+    echo "[ERROR] 沒有指定 tag，且本機找不到任何已建置的 ${SERVICE_IMAGE_NAME} image" >&2
+    echo "        請先執行 ./scripts/ci.sh，或手動指定要部署的 tag： $0 <tag>" >&2
+    exit 1
+  fi
+  echo "[INFO] 未指定 tag，自動使用本機建置時間最新的版本： ${TAG}"
+  echo ""
 fi
 
 SERVICE_REF="${SERVICE_IMAGE_NAME}:${TAG}"
