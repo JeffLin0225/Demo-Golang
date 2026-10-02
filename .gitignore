@@ -1,0 +1,4 @@
+# CI 產出紀錄（build metadata），由 scripts/ci.sh 產生。
+# 這是 build 產物不是原始碼，而且真實環境對應物是 pipeline artifact
+# （存在 CI 系統裡，不進 repo），所以不 commit。
+.ci-build-state

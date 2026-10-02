@@ -51,6 +51,11 @@ done
 echo "--- building ${SERVICE_IMAGE_NAME} ---"
 docker build -q -f service/Dockerfile -t "${SERVICE_IMAGE_NAME}:${TAG}" .
 
+# 全部建置成功後，才把這次的產出寫成紀錄 —— 這是 CI 對 CD 唯一的交接方式。
+# 寫在這裡（而不是每建一支就寫一次）是刻意的：中途失敗就不該留下一筆
+# 看起來可部署、實際上少了幾支 image 的紀錄。
+write_build_state "$TAG"
+
 echo ""
 echo "===== CI 完成 ====="
 for target in "${BATCH_TARGETS[@]}"; do
@@ -58,8 +63,11 @@ for target in "${BATCH_TARGETS[@]}"; do
 done
 echo "  ${SERVICE_IMAGE_NAME}:${TAG}"
 echo ""
-echo "叢集中執行的版本不受影響，仍是舊版。"
-echo "這是目前本機建置時間最新的版本，cd.sh 不帶參數執行時會自動部署這一版"
-echo "（即使 build 跟 deploy 分開時間/隔天執行也一樣，不需要手動複製貼上 tag）。"
-echo "要讓這一版生效： ./scripts/cd.sh            （不帶參數＝部署本機最新建置的版本）"
+echo "已寫入 CI 產出紀錄： ${BUILD_STATE_FILE}"
+echo "這是 CD 唯一的依據（CD 不會自己猜版本），即使 build 與 deploy 分開時間、"
+echo "由不同 pipeline 觸發也一樣，不需要人工複製貼上 tag。"
+echo ""
+echo "叢集中執行的版本不受影響，仍是舊版 —— 版本閘門在 Deployment 的 env，"
+echo "只有 cd.sh 會動它，所以這一刻觸發批次仍然會跑舊版（這是刻意的）。"
+echo "要讓這一版生效： ./scripts/cd.sh            （不帶參數＝部署 CI 產出紀錄裡的版本）"
 echo "要改部署別的版本： ./scripts/cd.sh <tag>     （例如要刻意跑舊版本做新舊比較）"

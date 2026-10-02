@@ -24,12 +24,15 @@ docker images \
   --format '{{.Repository}}:{{.Tag}}' | sort | sed 's/^/  /' || true
 echo ""
 
-echo "===== cd.sh 不帶參數時會部署的版本（本機建置時間最新）====="
-last_build="$(latest_built_tag)"
-if [[ -n "$last_build" ]]; then
-  echo "  ${last_build}"
+echo "===== CI 產出紀錄（cd.sh 不帶參數時唯一的依據）====="
+if [[ -f "$BUILD_STATE_FILE" ]]; then
+  echo "  紀錄檔    : ${BUILD_STATE_FILE}"
+  echo "  BUILD_TAG : $(read_build_state BUILD_TAG || echo '(缺)')"
+  echo "  建置時間  : $(read_build_state BUILD_TIME || echo '(缺)')"
+  echo "  commit    : $(read_build_state BUILD_COMMIT || echo '(缺)')"
 else
-  echo "  (尚未執行過 ci.sh，本機沒有任何已建置的 image)"
+  echo "  (尚未執行過 ci.sh，沒有產出紀錄；此時 cd.sh 不帶參數會直接報錯，"
+  echo "   刻意不猜版本)"
 fi
 echo ""
 
