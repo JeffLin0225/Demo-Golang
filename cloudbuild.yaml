@@ -1,0 +1,61 @@
+# Demo-Golang 的批次 image。用 --no-source 執行，Cloud Build 自己從 GitHub clone：
+#   gcloud builds submit --no-source --config cloudbuild.yaml \
+#     --service-account "projects/<PROJECT_ID>/serviceAccounts/sep-builder@<PROJECT_ID>.iam.gserviceaccount.com"
+# image tag 是 clone 下來那個 commit 的 short sha
+steps:
+  # 1. clone 指定分支最新的 commit，把 short sha 存起來當 tag
+  - id: clone
+    name: gcr.io/cloud-builders/git
+    entrypoint: bash
+    args:
+      - -c
+      - |
+        git clone --depth 1 --branch ${_BRANCH} ${_REPO_URL} src
+        git -C src rev-parse --short HEAD > /workspace/sha
+        echo "build commit: $$(cat /workspace/sha)"
+
+  # 2~4. 三個批次互不相關，clone 完就同時 build
+  - id: build-emailbatch
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    dir: src
+    waitFor: ["clone"]
+    args:
+      - -c
+      - |
+        IMG=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/emailbatch:$$(cat /workspace/sha)
+        docker build -f Batch/EmailBatch/Dockerfile -t $$IMG .
+        docker push $$IMG
+
+  - id: build-linebatch
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    dir: src
+    waitFor: ["clone"]
+    args:
+      - -c
+      - |
+        IMG=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/linebatch:$$(cat /workspace/sha)
+        docker build -f Batch/LineBatch/Dockerfile -t $$IMG .
+        docker push $$IMG
+
+  - id: build-errorbatch
+    name: gcr.io/cloud-builders/docker
+    entrypoint: bash
+    dir: src
+    waitFor: ["clone"]
+    args:
+      - -c
+      - |
+        IMG=${_REGION}-docker.pkg.dev/${PROJECT_ID}/${_REPO}/errorbatch:$$(cat /workspace/sha)
+        docker build -f Batch/ErrorBatch/Dockerfile -t $$IMG .
+        docker push $$IMG
+
+substitutions:
+  _REGION: asia-east1
+  _REPO: demo-go
+  _BRANCH: main
+  _REPO_URL: https://github.com/JeffLin0225/Demo-Golang.git
+
+options:
+  logging: CLOUD_LOGGING_ONLY
